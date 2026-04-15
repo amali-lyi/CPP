@@ -1,109 +1,165 @@
+#define _CRT_SECURE_NO_WARNINGS 
 #include <iostream>
-#include <ctime>
+#include <cstring>
 
 using namespace std;
 
-class Stopwatch {
-    int seconds;
-    bool paused;
-    mutable int queryCount;
-
-    static int stopwatchCount;
-    static int activeStopwatches;
-
-    time_t lastUpdate;
+class String
+{
+    char* data;
+    size_t length;
 
 public:
-    explicit Stopwatch(int sec) : seconds(sec), paused(false), queryCount(0) {
-        lastUpdate = time(nullptr);
-        stopwatchCount++;
-        activeStopwatches++;
+    String()
+    {
+        length = 0;
+        data = new char[1];
+        data[0] = '\0';
     }
 
-    explicit Stopwatch(double min) : seconds(static_cast<int>(min * 60)), paused(false), queryCount(0) {
-        lastUpdate = time(nullptr);
-        stopwatchCount++;
-        activeStopwatches++;
+    String(const char* str)
+    {
+        length = strlen(str);
+        data = new char[length + 1];
+        strcpy(data, str);
     }
 
-    ~Stopwatch() {
-        stopwatchCount--;
-        if (!paused) {
-            activeStopwatches--;
+    String(const String& other)
+    {
+        length = other.length;
+        data = new char[length + 1];
+        strcpy(data, other.data);
+    }
+
+    String(String&& other) noexcept
+    {
+        data = other.data;
+        length = other.length;
+        other.data = nullptr;
+        other.length = 0;
+    }
+
+    ~String()
+    {
+        delete[] data;
+    }
+
+    String& operator=(const String& other)
+    {
+        if (this != &other)
+        {
+            delete[] data;
+            length = other.length;
+            data = new char[length + 1];
+            strcpy(data, other.data);
         }
+        return *this;
     }
 
-    void Tick() {
-        if (!paused) {
-            time_t now = time(nullptr);
-            seconds += static_cast<int>(now - lastUpdate);
-            lastUpdate = now;
+    String& operator=(String&& other) noexcept
+    {
+        if (this != &other)
+        {
+            delete[] data;
+            data = other.data;
+            length = other.length;
+            other.data = nullptr;
+            other.length = 0;
         }
+        return *this;
     }
 
-    void pause(bool pauseState = true) {
-        if (paused != pauseState) {
-            paused = pauseState;
-
-            if (paused) {
-                activeStopwatches--;
-            }
-            else {
-                lastUpdate = time(nullptr);
-                activeStopwatches++;
-            }
-        }
+    String operator+(const String& other) const
+    {
+        String result;
+        delete[] result.data;
+        result.length = length + other.length;
+        result.data = new char[result.length + 1];
+        strcpy(result.data, data);
+        strcat(result.data, other.data);
+        return result;
     }
 
-    int GetSeconds() const {
-        queryCount++;
-        return seconds;
+    String& operator+=(const String& other)
+    {
+        *this = *this + other;
+        return *this;
     }
 
-    double GetMinutes() const {
-        queryCount++;
-        return seconds / 60.0;
+    bool operator==(const String& other) const
+    {
+        return strcmp(data, other.data) == 0;
     }
 
-    bool IsPaused() const {
-        return paused;
+    bool operator!=(const String& other) const
+    {
+        return !(*this == other);
     }
 
-    int GetQueryCount() const {
-        return queryCount;
+    bool operator<(const String& other) const
+    {
+        return strcmp(data, other.data) < 0;
     }
 
-    static int GetStopwatchCount() {
-        return stopwatchCount;
+    bool operator>(const String& other) const
+    {
+        return strcmp(data, other.data) > 0;
     }
 
-    static int GetActiveStopwatches() {
-        return activeStopwatches;
+    char& operator[](int index)
+    {
+        return data[index];
+    }
+
+    const char& operator[](int index) const
+    {
+        return data[index];
+    }
+
+    bool operator!() const
+    {
+        return length == 0;
+    }
+
+    operator const char* () const
+    {
+        return data;
     }
 };
 
-int Stopwatch::stopwatchCount = 0;
-int Stopwatch::activeStopwatches = 0;
+ostream& operator<<(ostream& os, const String& s)
+{
+    os << (const char*)s;
+    return os;
+}
 
-int main() {
-    Stopwatch sw1(180);    
-    Stopwatch sw2(2.5);  
+int main()
+{
+    String s1("Hello");
+    String s2(" World");
 
-    cout << "Seconds sw1: " << sw1.GetSeconds() << endl;
-    cout << "Minutes sw2: " << sw2.GetMinutes() << endl;
+    cout << s1 << endl;
+    cout << s2 << endl;
 
-    sw1.Tick();
-    sw2.Tick();
+    String s3 = s1 + s2;
+    cout << s3 << endl;
 
-    cout << "\nAfter Tick:" << endl;
-    cout << "sw1 seconds: " << sw1.GetSeconds() << endl;
-    cout << "sw2 seconds: " << sw2.GetSeconds() << endl;
+    s1 += s2;
+    cout << s1 << endl;
 
-    sw1.pause();
-    cout << "\nsw1 paused: " << sw1.IsPaused() << endl;
+    cout << (s1 == s3) << endl;
+    cout << (s1 != s2) << endl;
 
-    cout << "\nTotal stopwatches: " << Stopwatch::GetStopwatchCount() << endl;
-    cout << "Active stopwatches: " << Stopwatch::GetActiveStopwatches() << endl;
+    cout << (s1 > s2) << endl;
+    cout << (s1 < s2) << endl;
+
+    cout << s1[1] << endl;
+
+    s1[0] = 'h';
+    cout << s1 << endl;
+
+    String empty;
+    cout << !empty << endl;
 
     return 0;
 }
