@@ -142,16 +142,36 @@ public:
     const T& operator[](size_t index) const { return data[index]; }
 
     // Повертає перший елемент масиву
-    T& Front() { return data[0]; }
+     T& Front()
+    {
+        if (Empty())
+            throw std::out_of_range("Front() - array is empty");
+        return data[0];
+    }
 
     // Повертає останній елемент масиву
-    T& Back() { return data[size - 1]; }
+    T& Back()
+    {
+        if (Empty())
+            throw std::out_of_range("Back() - array is empty");
+        return data[size - 1];
+    }
 
     // Константна версія Front
-    const T& Front() const { return data[0]; }
+    const T& Front() const
+    {
+        if (Empty())
+            throw std::out_of_range("Front() - array is empty");
+        return data[0];
+    }
 
     // Константна версія Back
-    const T& Back() const { return data[size - 1]; }
+    const T& Back() const
+    {
+        if (Empty())
+            throw std::out_of_range("Back() - array is empty");
+        return data[size - 1];
+    }
 
     // Повертає сирий вказівник на масив
     T* Data() { return data; }
