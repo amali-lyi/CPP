@@ -1,0 +1,102 @@
+#include <list>
+#include <stdexcept>
+using namespace std;
+
+template<typename T>
+class Stack
+{
+    list<T> list;
+    int max_size;
+
+public:
+    Stack(int max_size = -1)
+    {
+        this->max_size = max_size;
+    }
+
+    void Push(const T& item)
+    {
+        if (max_size != -1 && list.size() >= max_size)
+            throw overflow_error("Stack overflow");
+
+        list.push_front(item);
+    }
+
+    T Pop()
+    {
+        if (list.empty())
+            throw underflow_error("Stack is empty");
+
+        T value = list.front();
+        list.pop_front();
+        return value;
+    }
+
+    const T& Top() const
+    {
+        if (list.empty())
+            throw underflow_error("Stack is empty");
+
+        return list.front();
+    }
+
+    bool Empty() const
+    {
+        return list.empty();
+    }
+
+    int Size() const
+    {
+        return list.size();
+    }
+};
+
+template<typename T>
+class Queue
+{
+    list<T> list;
+    bool isCyclical;
+
+public:
+    Queue(bool isCyclical = false)
+    {
+        this->isCyclical = isCyclical;
+    }
+
+    void Push(const T& item)
+    {
+        list.push_back(item);
+    }
+
+    T Pop()
+    {
+        if (list.empty())
+            throw underflow_error("Queue is empty");
+
+        T value = list.front();
+        list.pop_front();
+
+        if (isCyclical)
+            list.push_back(value);
+
+        return value;
+    }
+
+    const T& Front() const
+    {
+        if (list.empty())
+            throw underflow_error("Queue is empty");
+
+        return list.front();
+    }
+
+    bool Empty() const
+    {
+        return list.empty();
+    }
+
+    int Size() const
+    {
+        return list.size();
+    }
+};
