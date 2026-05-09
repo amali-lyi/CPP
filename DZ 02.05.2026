@@ -1,0 +1,345 @@
+#include <chrono>
+#include <iostream>
+#include <map>
+#include <thread>
+#include <vector>
+#include <algorithm>
+
+using namespace std;
+
+class Character;
+
+struct EffectContext
+{
+    int duration;
+
+    EffectContext(int inDuration)
+    {
+        duration = inDuration;
+    }
+
+    virtual ~EffectContext() = default;
+};
+
+class Effect
+{
+    Character* owner;
+    int duration;
+    int lasted;
+
+    bool ended = false;
+
+protected:
+    virtual void OnTick() {}
+    virtual void OnEnd() {}
+
+public:
+    Character* GetOwner() const { return owner; }
+
+    bool IsEnded() const { return ended; }
+
+    Effect(Character* inOwner, const EffectContext& inContext)
+    {
+        owner = inOwner;
+        duration = inContext.duration;
+        lasted = 0;
+    }
+
+    void End()
+    {
+        if (ended) return;
+
+        ended = true;
+
+        OnEnd();
+    }
+
+    virtual ~Effect()
+    {
+        End();
+    }
+
+    void Tick()
+    {
+        if (IsEnded()) return;
+
+        if (duration <= lasted)
+        {
+            End();
+            return;
+        }
+
+        OnTick();
+        ++lasted;
+    }
+};
+
+struct CharacterContext
+{
+    int health = 0;
+    int stamina = 0;
+    int mana = 0;
+    int damage = 0;
+};
+
+class Item
+{
+public:
+    virtual void Use(Character* character) = 0;
+    virtual ~Item() = default;
+};
+
+class Character
+{
+    map<string, float> properties;
+
+    vector<Effect*> effects;
+    vector<Item*> items;
+
+public:
+    float& Property(const string& name) { return properties[name]; }
+
+    Character(const CharacterContext& inContext)
+    {
+        Property("Vitality.Health.Value") = Property("Vitality.Health.Max") = inContext.health;
+        Property("Vitality.Stamina.Value") = Property("Vitality.Stamina.Max") = inContext.stamina;
+        Property("Vitality.Mana.Value") = Property("Vitality.Mana.Max") = inContext.mana;
+        Property("Vitality.Damage.Value") = inContext.damage;
+        Property("Vitality.Damage.Bonus") = 0;
+        Property("Vitality.Hunger.Value") = 0;
+        Property("Vitality.Hunger.Max") = 100;
+    }
+
+    ~Character()
+    {
+        for (Effect* effect : effects)
+        {
+            delete effect;
+        }
+
+        for (Item* item : items)
+        {
+            delete item;
+        }
+    }
+
+    void Tick()
+    {
+        for (Effect* effect : effects)
+        {
+            effect->Tick();
+
+            if (effect->IsEnded())
+            {
+                delete effect;
+                erase(effects, effect);
+            }
+        }
+    }
+
+    template <typename T>
+        requires std::derived_from<T, Effect>
+    void AddEffect(const EffectContext& inContext)
+    {
+        effects.push_back(new T(this, inContext));
+    }
+
+    void AddItem(Item* item)
+    {
+        items.push_back(item);
+    }
+
+    void UseItem(int index)
+    {
+        if (index < 0 || index >= items.size()) return;
+
+        items[index]->Use(this);
+
+        delete items[index];
+        items.erase(items.begin() + index);
+    }
+
+    void Print() const
+    {
+        for (const auto& property : properties)
+        {
+            cout << " * " << property.first << " - " << property.second << '\n';
+        }
+    }
+};
+
+struct StrengthEffectContext : EffectContext
+{
+    int bonus = 0;
+
+    StrengthEffectContext(int inDuration, int inBonus)
+        : EffectContext(inDuration)
+    {
+        bonus = inBonus;
+    }
+};
+
+class StrengthEffect : public Effect
+{
+    int bonus = 0;
+
+public:
+    StrengthEffect(Character* inOwner, const EffectContext& inContext)
+        : Effect(inOwner, inContext)
+    {
+        const StrengthEffectContext& castedContext =
+            static_cast<const StrengthEffectContext&>(inContext);
+
+        bonus = castedContext.bonus;
+
+        GetOwner()->Property("Vitality.Damage.Bonus") += bonus;
+    }
+
+    void OnEnd() override
+    {
+        GetOwner()->Property("Vitality.Damage.Bonus") -= bonus;
+    }
+
+    ~StrengthEffect() override = default;
+};
+
+struct HealingEffectContext : EffectContext
+{
+    int heal = 0;
+
+    HealingEffectContext(int inDuration, int inHeal)
+        : EffectContext(inDuration)
+    {
+        heal = inHeal;
+    }
+};
+
+class HealingEffect : public Effect
+{
+    int heal = 0;
+
+public:
+    HealingEffect(Character* inOwner, const EffectContext& inContext)
+        : Effect(inOwner, inContext)
+    {
+        const HealingEffectContext& castedContext =
+            static_cast<const HealingEffectContext&>(inContext);
+
+        heal = castedContext.heal;
+    }
+
+    void OnTick() override
+    {
+        GetOwner()->Property("Vitality.Health.Value") += heal;
+
+        float maxHealth = GetOwner()->Property("Vitality.Health.Max");
+
+        if (GetOwner()->Property("Vitality.Health.Value") > maxHealth)
+        {
+            GetOwner()->Property("Vitality.Health.Value") = maxHealth;
+        }
+    }
+};
+
+class Potion : public Item
+{
+    int manaRestore;
+
+public:
+    Potion(int inManaRestore)
+    {
+        manaRestore = inManaRestore;
+    }
+
+    void Use(Character* character) override
+    {
+        character->Property("Vitality.Mana.Value") += manaRestore;
+
+        float maxMana = character->Property("Vitality.Mana.Max");
+
+        if (character->Property("Vitality.Mana.Value") > maxMana)
+        {
+            character->Property("Vitality.Mana.Value") = maxMana;
+        }
+    }
+};
+
+class Food : public Item
+{
+    int hungerRestore;
+    int healPerTick;
+    int duration;
+
+public:
+    Food(int inHungerRestore, int inHealPerTick, int inDuration)
+    {
+        hungerRestore = inHungerRestore;
+        healPerTick = inHealPerTick;
+        duration = inDuration;
+    }
+
+    void Use(Character* character) override
+    {
+        character->Property("Vitality.Hunger.Value") += hungerRestore;
+
+        float maxHunger = character->Property("Vitality.Hunger.Max");
+
+        if (character->Property("Vitality.Hunger.Value") > maxHunger)
+        {
+            character->Property("Vitality.Hunger.Value") = maxHunger;
+        }
+
+        character->AddEffect<HealingEffect>(
+            HealingEffectContext(duration, healPerTick)
+        );
+    }
+};
+
+int main(int argc, char* argv[])
+{
+    CharacterContext characterContext;
+    characterContext.health = 100;
+    characterContext.stamina = 100;
+    characterContext.mana = 100;
+    characterContext.damage = 10;
+
+    Character* character = new Character(characterContext);
+
+    character->Property("Vitality.Health.Value") = 50;
+    character->Property("Vitality.Mana.Value") = 30;
+
+    character->AddItem(new Potion(40));
+    character->AddItem(new Food(50, 5, 5));
+
+    for (int i = 0; i < 20; i++)
+    {
+        if (i == 2)
+        {
+            character->UseItem(0); 
+        }
+
+        if (i == 5)
+        {
+            character->UseItem(0); 
+        }
+
+        if (i == 10)
+        {
+            character->AddEffect<StrengthEffect>(
+                StrengthEffectContext(5, 5)
+            );
+        }
+
+        character->Tick();
+
+        system("cls");
+        cout << "Character property (" << i << "): " << '\n';
+        character->Print();
+
+        this_thread::sleep_for(chrono::seconds(1));
+    }
+
+    delete character;
+
+    return 0;
+}
