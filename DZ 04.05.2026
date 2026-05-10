@@ -1,0 +1,166 @@
+#include <iostream>
+#include <string>
+#include <stdexcept>
+
+using namespace std;
+
+class MathParser
+{
+    string expression;
+    int position = 0;
+
+    char Current()
+    {
+        if (position >= expression.size())
+            return '\0';
+
+        return expression[position];
+    }
+
+    bool Match(char c)
+    {
+        if (Current() == c)
+        {
+            position++;
+            return true;
+        }
+
+        return false;
+    }
+
+    double ParseFactor()
+    {
+        if (Match('('))
+        {
+            double value = ParseExpression();
+
+            if (!Match(')'))
+                throw runtime_error("Missing ')'");
+
+            return value;
+        }
+
+        if (Match('+'))
+            return ParseFactor();
+
+        if (Match('-'))
+            return -ParseFactor();
+
+        int start = position;
+        bool hasDigit = false;
+        bool hasDot = false;
+
+        while (true)
+        {
+            char c = Current();
+
+            if (c >= '0' && c <= '9')
+            {
+                hasDigit = true;
+                position++;
+            }
+            else if (c == '.')
+            {
+                if (hasDot)
+                    throw runtime_error("Invalid number");
+
+                hasDot = true;
+                position++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (!hasDigit)
+            throw runtime_error("Expected number");
+
+        string number = expression.substr(start, position - start);
+        return stod(number);
+    }
+
+    double ParseTerm()
+    {
+        double value = ParseFactor();
+
+        while (true)
+        {
+            if (Match('*'))
+            {
+                value *= ParseFactor();
+            }
+            else if (Match('/'))
+            {
+                double divisor = ParseFactor();
+
+                if (divisor == 0)
+                    throw runtime_error("Division by zero");
+
+                value /= divisor;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return value;
+    }
+
+    double ParseExpression()
+    {
+        double value = ParseTerm();
+
+        while (true)
+        {
+            if (Match('+'))
+            {
+                value += ParseTerm();
+            }
+            else if (Match('-'))
+            {
+                value -= ParseTerm();
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return value;
+    }
+
+public:
+    double Evaluate(const string& expr)
+    {
+        expression = expr;
+        position = 0;
+
+        if (expression.empty())
+            throw runtime_error("Empty expression");
+
+        double result = ParseExpression();
+
+        if (position != expression.size())
+            throw runtime_error("Unexected symbol");
+
+        return result;
+    }
+};
+
+int main()
+{
+    try
+    {
+        MathParser parser;
+        double result = parser.Evaluate("4.5*1+4-1/5*61");
+        cout << result << endl;
+    }
+    catch (exception& e)
+    {
+        cout << "error: " << e.what() << endl;
+    }
+
+    return 0;
+}
