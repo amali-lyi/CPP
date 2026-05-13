@@ -1,0 +1,396 @@
+#include <chrono>
+#include <ctime>
+#include <cstdlib>
+#include <iostream>
+#include <thread>
+#include <vector>
+#include <string>
+#include <utility>
+
+using namespace std;
+
+class player;
+
+vector<string> history;
+
+class hero
+{
+    int health_;
+    int max_health_;
+    int damage_;
+
+public:
+    hero(int health, int damage)
+        : health_(health), max_health_(health), damage_(damage)
+    {
+    }
+
+    virtual ~hero() = default;
+
+    int get_health() const
+    {
+        return health_;
+    }
+
+    int get_max_health() const
+    {
+        return max_health_;
+    }
+
+    int get_damage() const
+    {
+        return damage_;
+    }
+
+    bool IsAlive() const
+    {
+        return health_ > 0;
+    }
+
+    bool NeedsHealing() const
+    {
+        return IsAlive() && health_ < max_health_;
+    }
+
+    void damage(int value)
+    {
+        health_ -= value;
+
+        if (health_ < 0)
+        {
+            health_ = 0;
+        }
+    }
+
+    void heal(int value)
+    {
+        health_ += value;
+
+        if (health_ > max_health_)
+        {
+            health_ = max_health_;
+        }
+    }
+
+    virtual void take_turn(player* enemy, player* self) = 0;
+    virtual string get_name() const = 0;
+};
+
+class player
+{
+    vector<hero*> heroes_;
+    vector<hero*> queue_;
+
+public:
+    template<typename T, typename... Args>
+    void add_hero(Args&&... args)
+    {
+        hero* new_hero = new T(std::forward<Args>(args)...);
+
+        heroes_.push_back(new_hero);
+        queue_.push_back(new_hero);
+    }
+
+    const vector<hero*>& get_heroes() const
+    {
+        return heroes_;
+    }
+
+    bool HasAliveHeroes() const
+    {
+        for (hero* h : heroes_)
+        {
+            if (h->IsAlive())
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    hero* GetRandomAliveHero()
+    {
+        vector<hero*> alive;
+
+        for (hero* h : heroes_)
+        {
+            if (h->IsAlive())
+            {
+                alive.push_back(h);
+            }
+        }
+
+        if (alive.empty())
+        {
+            return nullptr;
+        }
+
+        return alive[rand() % alive.size()];
+    }
+
+    hero* GetRandomDamagedHero()
+    {
+        vector<hero*> damaged;
+
+        for (hero* h : heroes_)
+        {
+            if (h->NeedsHealing())
+            {
+                damaged.push_back(h);
+            }
+        }
+
+        if (damaged.empty())
+        {
+            return nullptr;
+        }
+
+        return damaged[rand() % damaged.size()];
+    }
+
+    void MakeTurn(player* enemy)
+    {
+        if (queue_.empty())
+        {
+            return;
+        }
+
+        hero* current = queue_.front();
+        queue_.erase(queue_.begin());
+
+        if (current->IsAlive())
+        {
+            current->take_turn(enemy, this);
+        }
+
+        queue_.push_back(current);
+    }
+
+    void print(const string& player_name)
+    {
+        cout << player_name << ":\n";
+
+        for (hero* h : heroes_)
+        {
+            cout << "  " << h->get_name()
+                << " (HP: " << h->get_health()
+                << "/" << h->get_max_health()
+                << " Damage: " << h->get_damage() << ")";
+
+            if (!h->IsAlive())
+            {
+                cout << " [DEAD]";
+            }
+
+            cout << "\n";
+        }
+
+        cout << "\n";
+    }
+
+    void clear_heroes()
+    {
+        for (hero* h : heroes_)
+        {
+            delete h;
+        }
+
+        heroes_.clear();
+        queue_.clear();
+    }
+
+    ~player()
+    {
+        clear_heroes();
+    }
+};
+
+class warrior : public hero
+{
+public:
+    warrior(int health, int damage)
+        : hero(health, damage)
+    {
+    }
+
+    string get_name() const override
+    {
+        return "Warrior";
+    }
+
+    void take_turn(player* enemy, player* self) override
+    {
+        hero* target = enemy->GetRandomAliveHero();
+
+        if (target == nullptr)
+        {
+            history.push_back("Warrior has no target");
+            return;
+        }
+
+        target->damage(get_damage());
+
+        history.push_back(
+            "Warrior attacked " +
+            target->get_name() +
+            " for " +
+            to_string(get_damage()) +
+            " damage"
+        );
+    }
+};
+
+class mage : public hero
+{
+public:
+    mage(int health, int damage)
+        : hero(health, damage)
+    {
+    }
+
+    string get_name() const override
+    {
+        return "Mage";
+    }
+
+    void take_turn(player* enemy, player* self) override
+    {
+        hero* target = self->GetRandomDamagedHero();
+
+        if (target == nullptr)
+        {
+            history.push_back("Mage found no ally to heal");
+            return;
+        }
+
+        target->heal(get_damage());
+
+        history.push_back(
+            "Mage healed " +
+            target->get_name() +
+            " for " +
+            to_string(get_damage()) +
+            " HP"
+        );
+    }
+};
+
+class robber : public hero
+{
+public:
+    robber(int health, int damage)
+        : hero(health, damage)
+    {
+    }
+
+    string get_name() const override
+    {
+        return "Robber";
+    }
+
+    void take_turn(player* enemy, player* self) override
+    {
+        hero* target = enemy->GetRandomAliveHero();
+
+        if (target == nullptr)
+        {
+            history.push_back("Robber has no target");
+            return;
+        }
+
+        if (rand() % 2 == 0)
+        {
+            int crit_damage = get_damage() * 3;
+            target->damage(crit_damage);
+
+            history.push_back(
+                "Robber stealth attacked " +
+                target->get_name() +
+                " for " +
+                to_string(crit_damage) +
+                " damage"
+            );
+        }
+        else
+        {
+            damage(get_damage());
+
+            history.push_back(
+                "Robber was detected and took " +
+                to_string(get_damage()) +
+                " damage"
+            );
+        }
+    }
+};
+
+int main()
+{
+    srand(time(nullptr));
+
+    player player_1;
+    player_1.add_hero<warrior>(10, 2);
+    player_1.add_hero<mage>(10, 2);
+    player_1.add_hero<robber>(10, 2);
+
+    player player_2;
+    player_2.add_hero<warrior>(10, 2);
+    player_2.add_hero<mage>(10, 2);
+    player_2.add_hero<robber>(10, 2);
+
+    while (true)
+    {
+        system("cls");
+
+        player_1.MakeTurn(&player_2);
+
+        if (!player_2.HasAliveHeroes())
+        {
+            player_1.print("Player 1");
+            player_2.print("Player 2");
+
+            cout << "History:\n";
+
+            for (const string& event : history)
+            {
+                cout << event << "\n";
+            }
+
+            cout << "\nAll heroes of Player 2 are dead. Player 2 lost!\n";
+            break;
+        }
+
+        player_2.MakeTurn(&player_1);
+
+        if (!player_1.HasAliveHeroes())
+        {
+            player_1.print("Player 1");
+            player_2.print("Player 2");
+
+            cout << "History:\n";
+
+            for (const string& event : history)
+            {
+                cout << event << "\n";
+            }
+
+            cout << "\nAll heroes of Player 1 are dead. Player 1 lost!\n";
+            break;
+        }
+
+        player_1.print("Player 1");
+        player_2.print("Player 2");
+
+        cout << "History:\n";
+
+        for (const string& event : history)
+        {
+            cout << event << "\n";
+        }
+
+        this_thread::sleep_for(chrono::seconds(1));
+    }
+
+    return 0;
+}
