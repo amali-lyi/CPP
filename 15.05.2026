@@ -1,0 +1,134 @@
+#include <iostream>
+#include <map>
+#include <memory>
+#include <vector>
+#include <string>
+
+using namespace std;
+
+class asset
+{
+protected:
+    string path_;
+
+public:
+    asset(const string& path) : path_(path) {}
+
+    virtual char* read() = 0;
+    virtual void print() = 0;
+
+    virtual ~asset() = default;
+};
+
+class text_asset : public asset
+{
+    string text_;
+
+public:
+    text_asset(const string& path)
+        : asset(path)
+    {
+        text_ = "This is text from: " + path_;
+    }
+
+    ~text_asset() override = default;
+
+    char* read() override
+    {
+        return const_cast<char*>(text_.c_str());
+    }
+
+    void print() override
+    {
+        cout << "[TEXT ASSET] " << text_ << endl;
+    }
+};
+
+class asset_manager
+{
+    map<string, weak_ptr<asset>> assets_;
+
+public:
+    shared_ptr<asset> get(const string& path)
+    {
+        auto it = assets_.find(path);
+
+        if (it != assets_.end())
+        {
+            if (auto sp = it->second.lock())
+            {
+                return sp;
+            }
+        }
+
+        shared_ptr<asset> new_asset = make_shared<text_asset>(path);
+        assets_[path] = new_asset;
+
+        return new_asset;
+    }
+
+    void show_loaded()
+    {
+        for (auto& [path, weak] : assets_)
+        {
+            if (auto sp = weak.lock())
+            {
+                cout << path << " alive\n";
+            }
+            else
+            {
+                cout << path << " expired\n";
+            }
+        }
+    }
+
+    void unload(const string& path)
+    {
+        assets_.erase(path);
+    }
+};
+
+int main()
+{
+    asset_manager manager;
+    vector<shared_ptr<asset>> open_assets;
+
+    while (true)
+    {
+        cout << "1 Load\n2 Show\n3 Read\n4 Unload\n5 Exit\n";
+        int choice;
+        cin >> choice;
+
+        if (choice == 1)
+        {
+            string path;
+            cin >> path;
+
+            auto asset = manager.get(path);
+            open_assets.push_back(asset);
+        }
+        else if (choice == 2)
+        {
+            manager.show_loaded();
+        }
+        else if (choice == 3)
+        {
+            for (int i = 0; i < open_assets.size(); i++)
+            {
+                open_assets[i]->print();
+            }
+        }
+        else if (choice == 4)
+        {
+            string path;
+            cin >> path;
+            manager.unload(path);
+        }
+        else if (choice == 5)
+        {
+            break;
+        }
+    }
+
+    return 0;
+}
